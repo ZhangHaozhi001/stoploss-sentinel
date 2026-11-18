@@ -29,6 +29,15 @@ export PRIVATE_KEY="$(grep -oE '0x[0-9a-fA-F]{64}' "$WALLET_FILE" | head -1)"
 WALLET="$(cast wallet address --private-key "$PRIVATE_KEY")"
 echo "deployer: $WALLET"
 
+# Exact big-integer >= for wei amounts (bash [ ] overflows int64 > ~9.22e18,
+# which a 10-token exchange balance exceeds; compare by length, then digits).
+wei_ge() {
+  local a=$1 b=$2
+  [ "${#a}" -gt "${#b}" ] && return 0
+  [ "${#a}" -lt "${#b}" ] && return 1
+  [ "$a" = "$b" ] || [[ "$a" > "$b" ]]
+}
+
 base_bal=$(cast balance "$WALLET" --rpc-url "$BASE_RPC")
 lasna_bal=$(cast balance "$WALLET" --rpc-url "$LASNA_RPC")
 echo "Base Sepolia ETH (wei): $base_bal"
@@ -39,13 +48,13 @@ if [ "$base_bal" -lt 150000000000000000 ]; then
 fi
 
 # --- step 0: lREACT exchange -------------------------------------------------
-if [ "$lasna_bal" -lt 6000000000000000000 ]; then
+if ! wei_ge "$lasna_bal" 6000000000000000000; then
   echo "== exchanging 0.1 Base Sepolia ETH -> 10 lREACT"
   cast send "$FAUCET_BASE_SEPOLIA" "request(address)" "$WALLET" \
     --value 0.1ether --private-key "$PRIVATE_KEY" --rpc-url "$BASE_RPC"
   for i in $(seq 1 20); do
     lasna_bal=$(cast balance "$WALLET" --rpc-url "$LASNA_RPC")
-    [ "$lasna_bal" -ge 6000000000000000000 ] && break
+    wei_ge "$lasna_bal" 6000000000000000000 && break
     sleep 6
   done
   echo "Lasna lREACT after exchange (wei): $lasna_bal"

@@ -1,6 +1,6 @@
 # M2 REPORT — StopLoss Sentinel（测试网部署 & 首个全环路）
 
-执行时间：2026-11-18（节点 11-28，提前 10 天开工）。结论：**部署脚本与全流程已就绪并在双链分叉上彩排通过；真实测试网部署卡在一步人工动作——给测试钱包领 Base Sepolia ETH 的水龙头全部要求账号/浏览器验证，无法程序化完成（详见 §2）。钱包注资到位后，`bash script/run-m2.sh` 一条命令即可无人值守跑完 M2 剩余全部步骤。**
+执行时间：2026-11-18（节点 11-28，提前 10 天开工）。结论：**部署脚本与全流程已就绪并在双链分叉上彩排通过；真实测试网部署一度卡在给测试钱包领 Base Sepolia ETH（水龙头全部要求账号/浏览器验证，详见 §2）——后由用户转入 0.21 Sepolia ETH、经官方 L1StandardBridge 跨桥 0.20 ETH 解卡，`bash script/run-m2.sh` 已无人值守跑完，M2 全部完成（收尾实录见 §5）。**
 
 全程只用测试网与代理自管测试钱包，未碰用户钱包、未花主网资金、未注册/提交 DoraHacks。
 
@@ -55,4 +55,27 @@
 
 ## M2 剩余清单（一句话版）
 
-人工给 0x6ae9e830E7AB6215649863Bc7cA7f83d74f9b314 领 ≥0.2 Base Sepolia ETH → `bash script/run-m2.sh` → 抓三腿哈希 + Sourcify 验证 + README 回填 → M2 完成；之后 M3（12-1）从干净钱包重跑取最终哈希。
+~~人工给 0x6ae9…9314 领 ≥0.2 Base Sepolia ETH~~ → 已由跨桥解卡（§5）；run-m2.sh 实跑、三腿哈希、Sourcify 验证、README 回填全部完成（§5）。之后 M3（12-1）从干净钱包重跑取最终哈希。
+
+## 5. 收尾实录：跨桥 + 真实全环路（2026-11-18 13:11–13:47 CST）
+
+**解卡路径（跨桥）**：用户 13:11 CST 从其钱包（0x333333…Df7Da）向测试钱包转入 **0.21 Sepolia ETH**（L1 tx `0xa1ce2…14e17`，钱包截图 + 链上余额双核实：Sepolia 余额恰 0.21 ETH）。桥地址先从 Base 官方文档 contracts 页（docs.base.org/specifications/reference/base-contracts，2026-11-13 更新版）一手核实：Ethereum Sepolia 上的 L1StandardBridge proxy = **0xfd0Bf71F60660E2f608ed56e1659C450eB113120**；发送前链上复核代码长度 2472 字节、EIP-1967 实现槽非零、`paused() = false`。
+
+- 跨桥 tx（Sepolia）：**0xaa0d82d7f95cc6ec44438b4f4c53a4117d455e98b6db26d6ff7917f62415531e**，块 12159343，`bridgeETH(200000, 0x)` 附 **0.20 ETH**，status 1；回执含 ETHBridged + OptimismPortal TransactionDeposited 事件，from/to 均为测试钱包（同地址跨桥）。
+- 到账：约 5 分钟后（第 14 次轮询）Base Sepolia 余额 = **0.200000 ETH**，分毫不差。Sepolia 侧余 ≈0.0100 ETH（留作 gas，实际桥 gas 仅约 0.000012 ETH）。
+
+**run-m2.sh 实跑**（退出码 0）：兑换 tx `0x016450027c3bf3b3d9d83c2c38bc02e361761ec89e9fd9ca0faff2ffb6d91a79`（0.1 ETH → 10 lREACT）→ 部署/接线/发价全过 → 第 6 步**第一次轮询即 frozen=true、rescueCount=1**。部署地址与哈希已回填 README（Deployed 一节），此处只记三腿：
+
+| 腿 | 链 | 哈希 | 证据 |
+|---|---|---|---|
+| Origin 发价 1000 | Base Sepolia | 0xde80fec76038bb07452e2bed0e26daef2170b061e38cb1baf6c3c070d40103e4 | 块 60290870；Blockscout status ok、postPrice(1000) |
+| Reactive react() | Lasna | 0x476255bfc21fcea58f95600132ab7ee5098a9fe19a06519a434ae6c067596bf7 | 块 8628415；`Triggered(1000, ts, count=1)`；tx to 系统合约 0x8888…8888；Reactscan 有该交易页 |
+| Callback 执行救援 | Base Sepolia | 0x676d9c41757e7671e698935585b0089136554333b07e40b5ea5df50b7507512c | 块 60290876（距发价仅 6 块）；to 官方回调代理 0x476F44b1…743585 的 deliverCallback；`Rescued(1000, 100 MOCK)`，100 MOCK 全额转入安全地址 |
+
+**Sourcify 验证（三合约全 exact_match）**：PriceBeacon（84532）match 59455361；GuardedVault（84532）match 59455365；SentinelReactive（5318007）match 59455388——Lasna 链 Sourcify 原生支持，无需退到 Reactscan 替代路径（M2 原预案作废）。
+
+**收尾复检**：forge test 重跑 **47 passed / 0 failed**；链上回读 vault frozen=true、rescueCount=1、beacon price=1000、金库 MOCK=0；余额对账全合（Base Sepolia 钱包余 ≈0.04998 = 0.2 − 0.1 兑换 − 0.05 金库预存 − gas；Lasna 钱包余 ≈4.83 lREACT、哨兵余 ≈4.967 lREACT；金库 ETH 余 ≈0.04999，回调账单仅扣约 0.00001 ETH）。
+
+**实跑中发现并已修的脚本缺陷**：run-m2.sh 第 0 步轮询用 bash `[ -ge ]` 比较 wei 余额，10 lREACT = 1e19 wei 超过 bash 有符号 64 位上限（≈9.22e18），比较报错空转 20 轮（约 2 分钟，未影响结果）。已改为按位数+字典序的精确大整数比较 `wei_ge()` 并通过 `bash -n`，M3 重跑不再犯。
+
+**M2 判定：全部完成**（部署、三腿真实跨链投递、Sourcify 验证、README 回填、提交推送）。剩余仅 M3（12-1，干净钱包重跑取最终提交哈希）与 12-3 提交包。
