@@ -49,12 +49,20 @@ contract SentinelReactive is AbstractReactive {
     uint256 public triggerCount;
     int256 public lastPrice;
 
+    /// @notice While paused the contract is unsubscribed and `react` is a
+    ///         no-op, so a paused sentinel can never trigger (or be billed).
+    bool public paused;
+
     event RuleUpdated(int256 floor, int256 ceiling, uint256 cooldownSeconds);
     event VaultUpdated(address indexed vault);
     event Triggered(int256 price, uint256 at, uint256 triggerCount);
+    event Paused();
+    event Unpaused();
 
     error NotOwner();
     error VaultNotSet();
+    error AlreadyPaused();
+    error NotPaused();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -108,11 +116,49 @@ contract SentinelReactive is AbstractReactive {
         emit RuleUpdated(floor_, ceiling_, cooldownSeconds_);
     }
 
+    /// @notice Pause the sentinel: drop the event subscription so no further
+    ///         logs are delivered (and none are billed), and make `react` a
+    ///         no-op as defense in depth.
+    function pause() external onlyOwner {
+        if (paused) revert AlreadyPaused();
+        paused = true;
+        SYSTEM.unsubscribe(
+            originChainId,
+            beacon,
+            PRICE_UPDATED_TOPIC_0,
+            REACTIVE_IGNORE,
+            REACTIVE_IGNORE,
+            REACTIVE_IGNORE
+        );
+        emit Paused();
+    }
+
+    /// @notice Resume the sentinel: re-create the subscription dropped by
+    ///         `pause` and start reacting to price posts again.
+    function unpause() external onlyOwner {
+        if (!paused) revert NotPaused();
+        paused = false;
+        SYSTEM.subscribe(
+            originChainId,
+            beacon,
+            PRICE_UPDATED_TOPIC_0,
+            REACTIVE_IGNORE,
+            REACTIVE_IGNORE,
+            REACTIVE_IGNORE
+        );
+        emit Unpaused();
+    }
+
     /// @inheritdoc IReactive
     function react(LogRecord memory log_) external onlySystem {
         if (log_.topic0 != PRICE_UPDATED_TOPIC_0) {
             // Not ours — fall through quietly. Reverting as a filter would
             // still bill us for the gas (see Reactive docs).
+            return;
+        }
+        if (paused) {
+            // Unsubscribed contracts should not receive logs at all; if one
+            // still arrives, ignore it instead of acting on a stale rule.
             return;
         }
 

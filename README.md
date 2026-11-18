@@ -52,13 +52,15 @@ Requires [Foundry](https://book.getfoundry.sh/) and the official Reactive librar
 ```bash
 git submodule update --init
 forge build
+forge test   # 47 unit/integration tests, incl. a mock-system harness and a
+             # local rehearsal of the full origin -> reactive -> callback loop
 ```
 
 ## Status
 
-Work in progress — scoped and scaffolded 2026-11-17; contracts compile; deployment
-and end-to-end loop scheduled per the build plan (build-complete by Dec 3, submission
-by Dec 5, 2026).
+Work in progress — scoped and scaffolded 2026-11-17; **contracts complete and
+fully tested 2026-11-18 (M1)**; testnet deployment and the on-chain end-to-end
+loop are next (build-complete by Dec 3, submission by Dec 5, 2026).
 
 ## License
 

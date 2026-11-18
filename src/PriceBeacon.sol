@@ -17,6 +17,7 @@ contract PriceBeacon {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     error NotOwner();
+    error ZeroAddress();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -39,6 +40,7 @@ contract PriceBeacon {
     }
 
     function transferOwnership(address newOwner_) external onlyOwner {
+        if (newOwner_ == address(0)) revert ZeroAddress();
         emit OwnershipTransferred(owner, newOwner_);
         owner = newOwner_;
     }

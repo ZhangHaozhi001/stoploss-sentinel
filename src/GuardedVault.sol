@@ -38,6 +38,7 @@ contract GuardedVault is AbstractCallback {
     error Frozen();
     error NotFrozen();
     error TokenTransferFailed();
+    error ZeroAddress();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -56,6 +57,7 @@ contract GuardedVault is AbstractCallback {
         address token_,
         address safeAddress_
     ) AbstractCallback(IPayable(payable(callbackProxy_)), sentinel_) {
+        if (safeAddress_ == address(0)) revert ZeroAddress();
         owner = msg.sender;
         token = IERC20(token_);
         safeAddress = safeAddress_;
@@ -74,13 +76,16 @@ contract GuardedVault is AbstractCallback {
         emit Withdrawn(msg.sender, amount_);
     }
 
-    /// @notice Callback entry point. `sentinel_` is injected by the network
-    ///         (it replaces the address(0) placeholder in the payload) and is
-    ///         checked against the expected reactive contract by
-    ///         `onlyCallbackSender`; AbstractPayer additionally requires the
-    ///         caller to be the callback proxy.
+    /// @notice Callback entry point. Authenticated twice: `onlyServiceProvider`
+    ///         (from AbstractPayer) requires the caller to be the chain's
+    ///         callback proxy — without it, anyone could spoof a callback by
+    ///         passing the sentinel's address — and `onlyCallbackSender`
+    ///         checks the `sentinel_` argument, which the network injects in
+    ///         place of the address(0) placeholder in the payload, against
+    ///         the expected reactive contract.
     function executeRescue(address sentinel_, int256 triggerPrice_)
         external
+        onlyServiceProvider
         onlyCallbackSender(sentinel_)
     {
         frozen = true;
@@ -102,8 +107,17 @@ contract GuardedVault is AbstractCallback {
     }
 
     function setSafeAddress(address safeAddress_) external onlyOwner {
+        if (safeAddress_ == address(0)) revert ZeroAddress();
         safeAddress = safeAddress_;
         emit SafeAddressUpdated(safeAddress_);
+    }
+
+    /// @notice Settles this vault's outstanding debt to the callback proxy
+    ///         (callbacks are billed to the recipient) from the vault's own
+    ///         native-token balance, so anyone can restart a starved vault
+    ///         after topping it up (docs pattern, mirrors the sentinel).
+    function coverDebt() external {
+        _coverDebt();
     }
 
     function balance() external view returns (uint256) {
