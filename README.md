@@ -44,6 +44,23 @@ Base Sepolia                     Reactive Lasna                    Base Sepolia
 Deployed addresses and the full-loop transaction hashes will be added here after the
 testnet deployment milestone (see PLAN.md in the working notes).
 
+## Deployment (M2)
+
+Foundry scripts in `script/` deploy and wire the system in order —
+`DeployBeacon` → `DeploySentinel` → `DeployVault` → `SetVault` → `PostPrice`
+(normal price, then a breach) — orchestrated end-to-end by `script/run-m2.sh`.
+The deployer is an agent-managed testnet wallet; lREACT is obtained from the
+official on-chain faucet contract on Base Sepolia
+(`0x2afaFD298b23b62760711756088F75B7409f5967`, `request(address)`, 1 ETH → 100 lREACT).
+Rule parameters for the demo run: initial price 2000, floor 1500, ceiling
+disabled, cooldown 300 s; the vault is seeded with 100 test tokens and 0.05 ETH
+(callbacks are billed to the recipient).
+
+The full flow has been rehearsed successfully on local forks of both live
+chains; the real testnet deployment is pending a Base Sepolia faucet drip to
+the deployer wallet (all public faucets currently require an account or
+browser wallet verification).
+
 ## Build
 
 Requires [Foundry](https://book.getfoundry.sh/) and the official Reactive library
@@ -59,8 +76,9 @@ forge test   # 47 unit/integration tests, incl. a mock-system harness and a
 ## Status
 
 Work in progress — scoped and scaffolded 2026-11-17; **contracts complete and
-fully tested 2026-11-18 (M1)**; testnet deployment and the on-chain end-to-end
-loop are next (build-complete by Dec 3, submission by Dec 5, 2026).
+fully tested 2026-11-18 (M1)**; M2 deployment scripts written and rehearsed
+end-to-end on chain forks 2026-11-18, real testnet deployment pending faucet
+funding of the deployer wallet (build-complete by Dec 3, submission by Dec 5, 2026).
 
 ## License
 
