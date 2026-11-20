@@ -77,6 +77,42 @@ then the breach:
 Post-loop state (re-read on-chain): vault `frozen = true`, `rescueCount = 1`,
 vault MOCK balance 0, beacon price 1000.
 
+## Deployed (M3 submission run, 2026-11-20)
+
+The identical system re-deployed and re-run end to end from a fresh clean
+wallet for the final submission. Deployer / safe address:
+`0x55A9E6Cb835751520A6238a3896D6ad5B66379D9`. Funding path: 0.22 Sepolia ETH
+was provided to the clean wallet; 0.20 ETH was bridged to Base Sepolia via
+the official L1StandardBridge (L1 tx
+[`0x1e694b01…a0282a4`](https://sepolia.etherscan.io/tx/0x1e694b018429ee641c81f9032f403008e570f7d195a84bff45fb67ebaa0282a4),
+block 12174032) and arrived in full.
+
+| Contract | Address | Deploy tx |
+|---|---|---|
+| PriceBeacon | `0x22fc9aBb07f59F75769C1940C3A023187726925D` | `0x8d299b0cc921ef7372c521557db01bbd7ea8da2ad750cfe02fc9e2c68d0ea43c` |
+| SentinelReactive | `0x4639428321f570773F11cc078280ff8f71b68cbd` | `0xd6bc2b79adeeca272ed10ee3b857d655118a3eab2a822a097d92ce0e10d27e89` |
+| MockERC20 (MOCK) | `0xB253862300855165330BCdbF3db405309b205aA3` | `0x607ab743fb9da34eab65b091112ccdc85cd6c5ea4a0a49cee5b15e60ae925e4f` |
+| GuardedVault | `0x34dF93443E96C9CB22ec426797752627b3AAbB38` | `0x89d54247c2ee5bacb0da7774f865766c88727eb5baabe91c0de7bb5124fd832f` |
+
+Wiring: `sentinel.setVault(vault)` on Lasna, tx
+`0xcf43b926bab63bb5a8f93b726ec12785b98cfc1de0a82cba881c6c9100fd8a6f`.
+All three core contracts are Sourcify-verified with **exact_match**
+(PriceBeacon match 59576594, GuardedVault 59576680, SentinelReactive 59576961).
+
+### M3 full loop (real cross-chain delivery)
+
+Normal price 2100 posted first (tx `0xcbecc9a8357ee35f8d12f140c3dbcce2c071b23087e273525acb065b85743c8d`, no trigger),
+then the breach:
+
+| Leg | Chain | Tx | Evidence |
+|---|---|---|---|
+| 1. Origin — `postPrice(1000)` | Base Sepolia | [`0x9a499fc1…46bc39`](https://sepolia.basescan.org/tx/0x9a499fc1f53032b571550348c1e2b0290eace7521af721de4085eba57346bc39) | block 61206550, `PriceUpdated(1000)` |
+| 2. Reactive — RSC `react()` | Lasna | [`0x1a2a4616…c8e9f8`](https://lasna.reactscan.net/tx/0x1a2a4616b32114dd9acc3374ad384b778902d2fddd3b1abd83fec9d806c8e9f8) | block 8797597, `Triggered(1000, …, triggerCount 1)` via system contract `0x8888…8888` |
+| 3. Callback — `deliverCallback` → `executeRescue` | Base Sepolia | [`0x1c544301…1d5047`](https://sepolia.basescan.org/tx/0x1c544301cde4ff769cfdcc94d598a6b4c91b02d679a2a5999e62a063511d5047) | block 61206556 (6 blocks after the breach post), via callback proxy `0x476F44b1…743585`; `Rescued(1000, 100 MOCK)`; 100 MOCK swept to the safe address |
+
+Post-loop state (re-read on-chain): vault `frozen = true`, `rescueCount = 1`,
+vault MOCK balance 0, beacon price 1000, sentinel `triggerCount = 1`.
+
 ## Deployment (M2)
 
 Foundry scripts in `script/` deploy and wire the system in order —
